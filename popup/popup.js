@@ -338,7 +338,7 @@ function downloadExport(format) {
     mime = 'application/json';
   } else {
     content = lastExportData.map(m => {
-      const tag = m.sender === 'self' ? 'Tôi' : 'Đối phương';
+      const tag = m.isSelf ? 'Tôi' : (m.sender || 'Đối phương');
       return `${tag}: ${m.text}`;
     }).join('\n');
     filename = `messenger-export-${ts}.txt`;

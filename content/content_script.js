@@ -3,7 +3,7 @@
 
   const DEFAULT_SELECTORS = {
     threadContainer: '[role="main"]',
-    messageRow: '[role="row"]',
+    messageRow: '[data-scope="messages_table"], [aria-roledescription="tin nhắn"], [aria-roledescription="message"], [role="row"]',
     messageText: 'div[dir="auto"]',
     inputBox: '[role="textbox"][contenteditable="true"]'
   };
@@ -140,6 +140,57 @@
       if (rightGap < leftGap - 40) return true;
     }
     return false;
+  }
+
+  function parseAriaLabel(ariaLabel) {
+    if (!ariaLabel) return { sender: null, timestamp: null };
+
+    const m = ariaLabel.match(/^(?:Lúc\s+|At\s+)?(\d{1,2}:\d{2}(?:\s*[AP]M)?(?:\s+\d{1,2}\s+(?:Tháng|January|February|March|April|May|June|July|August|September|October|November|December)\s+\d+,?\s*\d{0,4})?)\s*,?\s*([^:]+?)\s*:\s*/i);
+    if (m) {
+      return { timestamp: m[1].trim(), sender: m[2].trim() };
+    }
+
+    const sentByMe = /^(Bạn (?:đã )?gửi|You sent)/i.test(ariaLabel);
+    if (sentByMe) {
+      return { timestamp: null, sender: 'Bạn' };
+    }
+
+    return { sender: null, timestamp: null };
+  }
+
+  function isSelfSender(senderName) {
+    if (!senderName) return null;
+    const s = senderName.toLowerCase().trim();
+    return s === 'bạn' || s === 'you' || s === 'me';
+  }
+
+  function isSelfByClass(node) {
+    let el = node;
+    for (let i = 0; i < 15 && el; i++) {
+      const cl = el.classList;
+      if (cl) {
+        if (cl.contains('xuk3077')) return true;
+        if (cl.contains('x1cy8zhl')) return false;
+      }
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  function detectSenderFromDom(node) {
+    let el = node;
+    for (let i = 0; i < 10 && el; i++) {
+      el = el.parentElement;
+      if (!el) break;
+      const imgs = el.querySelectorAll(':scope > * img[alt], :scope > img[alt]');
+      for (const img of imgs) {
+        const alt = (img.getAttribute('alt') || '').trim();
+        if (alt && alt.length > 0 && alt.length < 100) {
+          return { sender: alt, source: 'avatar' };
+        }
+      }
+    }
+    return null;
   }
 
   async function triggerSuggestions(incoming) {
@@ -350,31 +401,72 @@
 
   function findScrollContainer() {
     const tc = state.threadContainer || document.querySelector(state.selectors.threadContainer);
-    if (!tc) return null;
-    let el = tc.querySelector(state.selectors.messageRow)?.parentElement || tc;
-    while (el && el !== document.body) {
-      const style = getComputedStyle(el);
-      if ((style.overflowY === 'auto' || style.overflowY === 'scroll') &&
-          el.scrollHeight > el.clientHeight + 10) {
-        return el;
+    if (tc) {
+      let el = tc.querySelector(state.selectors.messageRow)?.parentElement || tc;
+      while (el && el !== document.body) {
+        const style = getComputedStyle(el);
+        if ((style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+            el.scrollHeight > el.clientHeight + 10) {
+          return el;
+        }
+        el = el.parentElement;
       }
-      el = el.parentElement;
     }
-    return tc;
+    return null;
+  }
+
+  function findActiveThreadContainer() {
+    const candidates = [];
+    const all = document.querySelectorAll('div, section, main, article');
+
+    for (const el of all) {
+      if (el.clientHeight < 200) continue;
+      const textCount = el.querySelectorAll('div[dir="auto"]').length;
+      if (textCount < 3) continue;
+
+      const style = getComputedStyle(el);
+      const scrollable = style.overflowY === 'auto' || style.overflowY === 'scroll';
+      const overflowing = el.scrollHeight > el.clientHeight + 50;
+
+      let score = textCount;
+      if (scrollable) score *= 2;
+      if (overflowing) score *= 2;
+
+      const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+      if (aria.includes('messages') || aria.includes('tin nh') || aria.includes('conversation') || aria.includes('hội tho')) {
+        score *= 3;
+      }
+
+      candidates.push({ el, score, scrollable, overflowing, textCount, aria });
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+
+    log(`scroll candidates (top 5 of ${candidates.length}):`);
+    candidates.slice(0, 5).forEach((c, i) => {
+      log(`  [${i}] ${c.el.tagName} score=${c.score} text=${c.textCount} h=${c.el.clientHeight} sh=${c.el.scrollHeight} scrollable=${c.scrollable} overflowing=${c.overflowing} aria="${c.aria || c.el.getAttribute('aria-label') || ''}"`);
+    });
+
+    return candidates[0]?.el || null;
   }
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   function detectMessageSelector(scrollEl) {
     const candidates = [
+      '[data-scope="messages_table"]',
+      '[aria-roledescription="tin nhắn"]',
+      '[aria-roledescription="message"]',
       state.selectors.messageRow,
       '[role="row"]',
       '[role="gridcell"]',
-      '[data-scope="messages_table"]',
       'div[role="article"]'
     ];
+    const seen = new Set();
     let best = { selector: null, count: 0 };
     for (const sel of candidates) {
+      if (seen.has(sel)) continue;
+      seen.add(sel);
       try {
         const c = scrollEl.querySelectorAll(sel).length;
         log(`probe selector "${sel}" → ${c} elements`);
@@ -384,11 +476,73 @@
     return best;
   }
 
+  function buildMessageRecord(node, index) {
+    const text = (node.innerText || '').trim();
+    if (!text) return null;
+
+    const ariaLabel = node.closest('[aria-label]')?.getAttribute('aria-label') || '';
+    const parsed = parseAriaLabel(ariaLabel);
+
+    let sender = parsed.sender;
+    let senderSource = sender ? 'aria' : null;
+
+    if (!sender) {
+      const fromDom = detectSenderFromDom(node);
+      if (fromDom) {
+        sender = fromDom.sender;
+        senderSource = fromDom.source;
+      }
+    }
+
+    let isSelf = isSelfSender(sender);
+    let isSelfSource = isSelf !== null ? 'aria' : null;
+
+    if (isSelf === null) {
+      isSelf = isSelfByClass(node);
+      if (isSelf !== null) isSelfSource = 'class';
+    }
+
+    if (isSelf === null) {
+      isSelf = isFromSelf(node);
+      isSelfSource = 'heuristic';
+    }
+
+    if (!sender) {
+      sender = isSelf ? 'self' : 'other';
+      senderSource = 'heuristic';
+    }
+
+    return {
+      index,
+      sender,
+      isSelf,
+      senderSource,
+      isSelfSource,
+      timestamp: parsed.timestamp || null,
+      text,
+      ariaLabel
+    };
+  }
+
   function collectFallbackMessages(scrollEl) {
     const seen = new Set();
     const result = [];
-    const textNodes = scrollEl.querySelectorAll('div[dir="auto"]');
+    let textNodes = scrollEl.querySelectorAll('div[dir="auto"]');
     log(`fallback: ${textNodes.length} div[dir=auto] nodes`);
+
+    if (textNodes.length === 0) {
+      const all = scrollEl.querySelectorAll('span, div');
+      const filtered = [];
+      all.forEach(n => {
+        const text = (n.innerText || '').trim();
+        if (!text || text.length < 2) return;
+        const childHasText = Array.from(n.children).some(c => (c.innerText || '').trim() === text);
+        if (childHasText) return;
+        filtered.push(n);
+      });
+      log(`fallback v2: ${filtered.length} leaf text nodes`);
+      textNodes = filtered;
+    }
 
     textNodes.forEach((node) => {
       const text = (node.innerText || '').trim();
@@ -396,31 +550,29 @@
       if (seen.has(text)) return;
       let p = node;
       let depth = 0;
+      let skip = false;
       while (p && depth < 10) {
-        if (p.matches?.('input, textarea, [contenteditable="true"]')) return;
+        if (p.matches?.('input, textarea, [contenteditable="true"]')) { skip = true; break; }
         p = p.parentElement;
         depth++;
       }
+      if (skip) return;
       seen.add(text);
-      result.push({
-        index: result.length,
-        sender: isFromSelf(node) ? 'self' : 'other',
-        text,
-        ariaLabel: node.closest('[aria-label]')?.getAttribute('aria-label') || ''
-      });
+      const rec = buildMessageRecord(node, result.length);
+      if (rec) result.push(rec);
     });
     return result;
   }
 
   async function exportAllMessages(options) {
-    const tc = state.threadContainer || document.querySelector(state.selectors.threadContainer);
-    if (!tc) throw new Error('Chưa tìm thấy thread container. Mở 1 cuộc hội thoại trước.');
-    state.threadContainer = tc;
-    log('export: thread container =', tc.tagName, 'aria-label=', tc.getAttribute('aria-label'));
+    let scrollEl = findScrollContainer();
+    if (!scrollEl || scrollEl.scrollHeight < 100) {
+      log('primary scroll container empty, scanning page...');
+      scrollEl = findActiveThreadContainer();
+    }
+    if (!scrollEl) throw new Error('Không tìm được scroll container nào trên trang. Hãy chắc chắn đã mở 1 cuộc hội thoại.');
 
-    const scrollEl = findScrollContainer();
-    if (!scrollEl) throw new Error('Không tìm được scroll container.');
-    log('export: scroll container =', scrollEl.tagName, 'scrollHeight/clientHeight =', scrollEl.scrollHeight, '/', scrollEl.clientHeight);
+    log('export: scroll container =', scrollEl.tagName, 'scrollHeight/clientHeight =', scrollEl.scrollHeight, '/', scrollEl.clientHeight, 'aria-label=', scrollEl.getAttribute('aria-label'));
 
     const probe = detectMessageSelector(scrollEl);
     log('export: best selector =', probe.selector, 'count =', probe.count);
@@ -474,16 +626,7 @@
         messages = collectFallbackMessages(scrollEl);
       } else {
         const rows = Array.from(scrollEl.querySelectorAll(rowSelector));
-        messages = rows.map((row, idx) => {
-          const text = extractText(row);
-          if (!text) return null;
-          return {
-            index: idx,
-            sender: isFromSelf(row) ? 'self' : 'other',
-            text,
-            ariaLabel: row.getAttribute('aria-label') || ''
-          };
-        }).filter(Boolean);
+        messages = rows.map((row, idx) => buildMessageRecord(row, idx)).filter(Boolean);
 
         if (messages.length === 0) {
           log('primary selector returned 0 messages with text, trying fallback');
