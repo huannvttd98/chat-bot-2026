@@ -1,0 +1,110 @@
+/* Styles cho Shadow DOM overlay. Nội dung được inline trong content_script.js,
+   file này giữ để dễ đọc/edit. */
+
+:host {
+  all: initial;
+}
+
+.suggester {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #050505;
+  pointer-events: auto;
+  background: #ffffff;
+  border: 1px solid #e4e6eb;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 560px;
+}
+
+.suggester.dark {
+  background: #242526;
+  border-color: #3a3b3c;
+  color: #e4e6eb;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #65676b;
+}
+
+.suggester.dark .header { color: #b0b3b8; }
+
+.badge {
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.badge.rule { background: #e6f4ea; color: #137333; }
+.badge.claude { background: #f3e8ff; color: #7c3aed; }
+.badge.error { background: #fde7e9; color: #b91c1c; }
+
+.spacer { flex: 1; }
+
+.icon-btn {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 4px;
+  border-radius: 50%;
+  font-size: 12px;
+  color: inherit;
+  line-height: 1;
+}
+
+.icon-btn:hover { background: rgba(0, 0, 0, 0.06); }
+.suggester.dark .icon-btn:hover { background: rgba(255, 255, 255, 0.1); }
+
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 16px;
+  background: #f0f2f5;
+  border: 1px solid transparent;
+  max-width: 240px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: inherit;
+  transition: background 0.15s;
+}
+
+.chip:hover { background: #e4e6eb; border-color: #1877f2; }
+.suggester.dark .chip { background: #3a3b3c; }
+.suggester.dark .chip:hover { background: #4e4f50; }
+
+.chip.skeleton {
+  cursor: default;
+  background: linear-gradient(90deg, #f0f2f5 0%, #e4e6eb 50%, #f0f2f5 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  width: 120px;
+  color: transparent;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.error {
+  color: #b91c1c;
+  font-size: 12px;
+  padding: 4px 8px;
+}

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Messenger Reply Suggester</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="header">
+    <h1>Reply Suggester</h1>
+    <label class="switch" title="Bật/tắt extension">
+      <input type="checkbox" id="enabled-toggle" aria-label="Bật/tắt extension">
+      <span class="slider"></span>
+    </label>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="rules">Rules</button>
+    <button class="tab" data-tab="export">Export</button>
+    <button class="tab" data-tab="advanced">Advanced</button>
+  </nav>
+
+  <main>
+    <section class="panel active" data-panel="rules">
+      <div class="row between">
+        <h2>Rules</h2>
+        <div>
+          <button id="add-rule" class="primary small">+ Thêm</button>
+          <button id="export-rules" class="small">Export</button>
+          <button id="import-rules" class="small">Import</button>
+          <input type="file" id="import-file" accept=".json" style="display:none">
+        </div>
+      </div>
+      <table id="rules-table">
+        <thead>
+          <tr><th>Tên</th><th>Loại</th><th>Pattern</th><th>On</th><th></th></tr>
+        </thead>
+        <tbody id="rules-body"></tbody>
+      </table>
+      <p id="rules-empty" class="muted">Chưa có rule nào. Click "+ Thêm" để tạo.</p>
+    </section>
+
+    <section class="panel" data-panel="export">
+      <h2>Export tin nhắn</h2>
+      <p class="muted">Auto-scroll lên đầu để load toàn bộ lịch sử hội thoại đang mở rồi tải về file. Có thể mất vài phút với hội thoại dài. <strong>Đừng đóng popup này khi đang chạy.</strong></p>
+      <div class="row">
+        <button id="export-start" class="primary">Lấy toàn bộ tin nhắn</button>
+        <span id="export-status" class="status"></span>
+      </div>
+      <div id="export-result" style="display:none; margin-top:12px;">
+        <p class="muted">Đã thu thập <strong id="export-count">0</strong> tin nhắn.</p>
+        <div class="row">
+          <button id="download-json" class="primary small">Download JSON</button>
+          <button id="download-txt" class="primary small">Download TXT</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="advanced">
+      <h2>Selectors override</h2>
+      <p class="muted">Chỉnh khi messenger.com đổi DOM. Để trống = dùng default.</p>
+      <textarea id="selectors-json" rows="8" placeholder='{
+  "threadContainer": "[role=\"main\"]",
+  "messageRow": "[role=\"row\"]",
+  "messageText": "div[dir=\"auto\"]",
+  "inputBox": "[role=\"textbox\"][contenteditable=\"true\"]"
+}'></textarea>
+      <div class="row">
+        <button id="save-selectors" class="primary">Lưu</button>
+        <button id="reset-selectors" class="small">Reset default</button>
+        <span id="selectors-status" class="status"></span>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="rule-dialog">
+    <form method="dialog" id="rule-form">
+      <h3 id="rule-dialog-title">Thêm rule</h3>
+      <input type="hidden" id="rule-id">
+      <label>Tên<input type="text" id="rule-name" required></label>
+      <label>Loại match
+        <select id="rule-type">
+          <option value="keyword">Keyword</option>
+          <option value="regex">Regex</option>
+        </select>
+      </label>
+      <label id="patterns-label">Patterns (mỗi dòng 1 keyword)
+        <textarea id="rule-patterns" rows="3"></textarea>
+      </label>
+      <label id="pattern-label" style="display:none">Regex pattern
+        <input type="text" id="rule-pattern" placeholder="(giá|price)">
+      </label>
+      <label id="flags-label" style="display:none">Flags
+        <input type="text" id="rule-flags" placeholder="i" value="i">
+      </label>
+      <label><input type="checkbox" id="rule-case"> Case sensitive (chỉ keyword)</label>
+      <label>Replies (mỗi dòng 1 câu, tối thiểu 1)
+        <textarea id="rule-replies" rows="4" required></textarea>
+      </label>
+      <label><input type="checkbox" id="rule-enabled" checked> Enabled</label>
+      <div class="row right">
+        <button type="button" id="rule-cancel">Hủy</button>
+        <button type="submit" class="primary">Lưu</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="popup.js"></script>
+</body>
+</html>

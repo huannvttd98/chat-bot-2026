@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Messenger Reply Suggester",
+  "version": "0.1.0",
+  "description": "Gợi ý câu trả lời cho tin nhắn Messenger theo rule (keyword/regex). Người dùng tự bấm gửi.",
+  "permissions": ["storage", "clipboardWrite"],
+  "host_permissions": [
+    "https://www.messenger.com/*",
+    "https://www.facebook.com/messages/*"
+  ],
+  "background": {
+    "service_worker": "background/service_worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.messenger.com/*",
+        "https://www.facebook.com/messages/*"
+      ],
+      "js": ["content/content_script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content/overlay.css"],
+      "matches": [
+        "https://www.messenger.com/*",
+        "https://www.facebook.com/*"
+      ]
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Messenger Reply Suggester"
+  }
+}
